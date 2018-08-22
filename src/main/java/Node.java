@@ -1,23 +1,22 @@
 import util.ConfigLoader;
 import util.HostConfig;
 
-import java.awt.*;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class Node {
     private int id;
     private int time;
     private ConcurrentHashMap<Integer, Socket> map;
+
+    final int port = 46378;
 
     public Node(int id) {
         this.id = id;
@@ -31,7 +30,9 @@ public class Node {
         try {
             hostConfigs.addAll(configLoader.loadExistingHostConfigs());
             for (HostConfig hostConfig : hostConfigs) {
+                System.out.println(hostConfig);
                 Socket socket = new Socket(hostConfig.getIP(), hostConfig.getPort());
+                new Thread(new Receiver(socket)).start();
                 ObjectOutputStream outputStream = new ObjectOutputStream(socket.getOutputStream());
                 Message message = new Message(id, Message.Type.INI);
                 outputStream.writeObject(message);
@@ -43,16 +44,17 @@ public class Node {
         }
 
         Thread listenerThread = new Thread(() -> {
-            try (ServerSocket listener = new ServerSocket(10000)) {
-                HostConfig localHostConfig = new HostConfig(id, InetAddress.getLocalHost().getHostAddress(), 10000);
+            try (ServerSocket listener = new ServerSocket(port)) {
+                HostConfig localHostConfig = new HostConfig(id, InetAddress.getLocalHost().getHostAddress(), port);
                 hostConfigs.add(localHostConfig);
                 configLoader.dumpHostConfigs(hostConfigs);
                 while (true) {
                     Socket socket = listener.accept();
                     ObjectInputStream inputStream = new ObjectInputStream(socket.getInputStream());
                     Message message = (Message) inputStream.readObject();
-                    map.put(message.getId(), socket);
+                    map.put(message.getSenderId(), socket);
                     System.out.println(message);
+                    new Thread(new Receiver(socket)).start();
                 }
             } catch (IOException e) {
                 e.printStackTrace();
@@ -68,7 +70,9 @@ public class Node {
     }
 
     private void start() {
-
+        for (Socket socket : map.values()) {
+            new Thread(new Sender(socket, id)).start();
+        }
     }
 
     public static void main(String[] args) {

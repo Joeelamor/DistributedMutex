@@ -31,7 +31,7 @@ public class ConfigLoader {
             YamlMapping y = yamlSequence.yamlMapping(i);
             HostConfig host = new HostConfig(
                 Integer.parseInt(y.string("id")),
-                y.string("ip"),
+                y.string("IP"),
                 Integer.parseInt(y.string("port"))
             );
             existingNodes.add(host);
