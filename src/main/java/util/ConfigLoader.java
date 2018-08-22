@@ -15,7 +15,7 @@ public class ConfigLoader {
         ConfigFileName = configFileName;
     }
 
-    public Collection<HostConfig> LoadExistingHostConfigs() throws IOException {
+    public Collection<HostConfig> loadExistingHostConfigs() throws IOException {
         File configFile = new File(this.ConfigFileName);
         YamlInput yamlInput;
         try {
@@ -39,7 +39,7 @@ public class ConfigLoader {
         return existingNodes;
     }
 
-    public void DumpHostConfigs(Collection<HostConfig> hostConfigs) throws IOException {
+    public void dumpHostConfigs(Collection<HostConfig> hostConfigs) throws IOException {
         if (hostConfigs == null || hostConfigs.size() == 0) {
             try (FileChannel outChan = new FileOutputStream(this.ConfigFileName, true).getChannel()) {
                 outChan.truncate(0);

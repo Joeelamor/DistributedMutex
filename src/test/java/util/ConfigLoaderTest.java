@@ -17,11 +17,11 @@ public class ConfigLoaderTest {
         File file = new File(classLoader.getResource("testLoadHostConfig.yml").getFile());
 
         ConfigLoader configLoader = new ConfigLoader(file.getAbsolutePath());
-        Collection<HostConfig> hostConfigs = configLoader.LoadExistingHostConfigs();
+        Collection<HostConfig> hostConfigs = configLoader.loadExistingHostConfigs();
         assertEquals(hostConfigs.size(), 3);
 
         ConfigLoader configLoaderEmpty = new ConfigLoader("file.not.exist");
-        Collection<HostConfig> emptyHostConfigs = configLoaderEmpty.LoadExistingHostConfigs();
+        Collection<HostConfig> emptyHostConfigs = configLoaderEmpty.loadExistingHostConfigs();
         assertEquals(emptyHostConfigs.size(), 0);
     }
 
@@ -35,11 +35,11 @@ public class ConfigLoaderTest {
         Collection<HostConfig> hostConfigs = new ArrayList<>();
         hostConfigs.add(new HostConfig(1, "127.0.0.1", 8090));
 
-        configLoader.DumpHostConfigs(hostConfigs);
+        configLoader.dumpHostConfigs(hostConfigs);
 
-        Collection<HostConfig> dumpedHostConfigs = configLoader.LoadExistingHostConfigs();
+        Collection<HostConfig> dumpedHostConfigs = configLoader.loadExistingHostConfigs();
         assertEquals(hostConfigs.size(), 1);
 
-        configLoader.DumpHostConfigs(null);
+        configLoader.dumpHostConfigs(null);
     }
 }
