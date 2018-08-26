@@ -1,5 +1,4 @@
 import algorithm.RicartAgrawala;
-import time.LogicalClock;
 import util.ConfigLoader;
 import util.HostConfig;
 import time.ScalarClock;
@@ -126,6 +125,7 @@ public class Node {
 
                     case FINISH:
                         op = ra.exitCriticalSection();
+                        requestGenerator.notify();
 
                 }
             } catch (Exception e) {
@@ -154,7 +154,6 @@ public class Node {
 //        while (true) {
 //            if (!messageQueue.isEmpty()) {
 //                System.out.println(messageQueue.poll());
-//            }
 //        }
 //    }
     private void executeCriticalSection() {
@@ -162,6 +161,7 @@ public class Node {
             System.out.println("!!!!!!ENTER CRITICAL SECTION!!!!!!");
             Thread.sleep(3000);
             messageQueue.offer(new Message(this.id, Message.Type.FINISH, time.incrementAndGet()));
+            System.out.println("Exit critical section");
         } catch (InterruptedException e) {
             e.printStackTrace();
         }

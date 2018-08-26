@@ -59,6 +59,11 @@ public class RequestGenerator implements Runnable{
             Message reqMessage = new Message(id ,Message.Type.REQ, time.incrementAndGet());
             queue.offer(reqMessage);
             broadcast(reqMessage);
+            try {
+                this.wait();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
         }
     }
 
