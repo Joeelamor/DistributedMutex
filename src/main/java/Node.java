@@ -52,7 +52,7 @@ public class Node {
                 this.send(hostConfig.getId(), message);
 
                 new Thread(new Receiver(inputStream, messageQueue, time)).start();
-                System.out.println("Finish");
+                System.out.println("Connected all exited hosts");
             }
         } catch (IOException e) {
             e.printStackTrace();

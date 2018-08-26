@@ -65,6 +65,7 @@ public class RequestGenerator implements Runnable{
     }
 
     private synchronized void waitForCurrentRequestFinish() {
+        exitsRequest = true;
         while (exitsRequest) {
             try {
                 wait();
