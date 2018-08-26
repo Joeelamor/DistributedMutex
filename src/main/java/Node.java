@@ -1,34 +1,35 @@
+import algorithm.RicartAgrawala;
+import time.LogicalClock;
 import util.ConfigLoader;
 import util.HostConfig;
+import time.ScalarClock;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
-import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class Node {
     private int id;
-    private int time;
-    private ConcurrentHashMap<Integer, Socket> socketMap;
+    private ScalarClock time;
     private ConcurrentLinkedQueue<Message> messageQueue;
-    private ConcurrentHashMap<Integer, ObjectOutputStream>  outputStreamMap;
+    private ConcurrentHashMap<Integer, Sender> senderMap;
+    private int nodeNum;
 
     final int port = 46378;
 
-    public Node(int id) {
+    public Node(int id, int nodeNum) {
         this.id = id;
-        this.time = 0;
-        this.socketMap = new ConcurrentHashMap<>();
+        this.time = new ScalarClock(id, id); // use id value as initial timestamp
         this.messageQueue = new ConcurrentLinkedQueue<>();
-        this.outputStreamMap = new ConcurrentHashMap<>();
+        this.nodeNum = nodeNum;
+        this.senderMap = new ConcurrentHashMap<>();
     }
 
     private void init() {
@@ -37,20 +38,21 @@ public class Node {
         try {
             hostConfigs.addAll(configLoader.loadExistingHostConfigs());
             for (HostConfig hostConfig : hostConfigs) {
-                System.out.println(hostConfig);
-                Socket socket = new Socket(hostConfig.getIP(), hostConfig.getPort());
-                System.out.println(socket);
-                ObjectOutputStream outputStream = new ObjectOutputStream(socket.getOutputStream());
-                System.out.println(outputStream);
-                Message message = new Message(id, Message.Type.INI);
-                outputStream.writeObject(message);
 
+                Socket socket = new Socket(hostConfig.getIP(), hostConfig.getPort());
+                ObjectOutputStream outputStream = new ObjectOutputStream(socket.getOutputStream());
                 ObjectInputStream inputStream = new ObjectInputStream(socket.getInputStream());
                 System.out.println(inputStream);
 
-                socketMap.put(hostConfig.getId(), socket);
-                outputStreamMap.put(hostConfig.getId(), outputStream);
-                new Thread(new Receiver(inputStream, messageQueue)).start();
+                Sender sender = new Sender(outputStream);
+                Thread senderThread = new Thread(sender);
+                senderThread.start();
+                senderMap.put(hostConfig.getId(), sender);
+
+                Message message = new Message(id, Message.Type.INI, time.incrementAndGet());
+                this.send(hostConfig.getId(), message);
+
+                new Thread(new Receiver(inputStream, messageQueue, time)).start();
                 System.out.println("Finish");
             }
         } catch (IOException e) {
@@ -65,14 +67,18 @@ public class Node {
                 configLoader.dumpHostConfigs(hostConfigs);
                 while (true) {
                     Socket socket = listener.accept();
-                    ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
-                    out.writeObject(new Message(id, Message.Type.INI));
-                    ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
-                    Message message = (Message) in.readObject();
-                    socketMap.put(message.getSenderId(), socket);
-                    outputStreamMap.put(message.getSenderId(), out);
+                    ObjectOutputStream outputStream = new ObjectOutputStream(socket.getOutputStream());
+                    ObjectInputStream inputStream = new ObjectInputStream(socket.getInputStream());
+                    Message message = (Message) inputStream.readObject();
+
+                    Sender sender = new Sender(outputStream);
+                    Thread senderThread = new Thread(sender);
+                    senderThread.start();
+                    senderMap.put(message.getSenderId(), sender);
+
+                    this.send(message.getSenderId(), new Message(id, Message.Type.INI, time.incrementAndGet()));
                     System.out.println(message);
-                    new Thread(new Receiver(in, messageQueue)).start();
+                    new Thread(new Receiver(inputStream, messageQueue, time)).start();
                 }
             } catch (IOException e) {
                 e.printStackTrace();
@@ -85,51 +91,103 @@ public class Node {
 
         listenerThread.start();
 
+        while (senderMap.size() < nodeNum - 1) {
+            continue;
+        }
     }
 
-    private void start() {
-        new Thread(() -> {
-            Random rand = new Random();
-            while (true) {
-                broadcast(new Message(id, Message.Type.REQ));
-                try {
-                    Thread.sleep(rand.nextInt(500) + 500);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
+    private void start(RequestGenerator requestGenerator) {
+        requestGenerator.setId(id);
+        requestGenerator.setQueue(messageQueue);
+        requestGenerator.setSenderMap(senderMap);
+        requestGenerator.setTime(time);
+        Thread requestGeneratorThread = new Thread(requestGenerator);
+        requestGeneratorThread.start();
+
+        RicartAgrawala ra = new RicartAgrawala(nodeNum);
+        RicartAgrawala.Operation op;
+        ArrayList<Integer> deferredReplies = new ArrayList<>(nodeNum - 1);
+        while (true) {
+            if (messageQueue.isEmpty()) {
+                continue;
+            }
+            op = RicartAgrawala.Operation.NOP;
+            Message message = messageQueue.poll();
+            try {
+                switch (message.getType()) {
+                    case REQ:
+                        if (message.getSenderId() == id) {
+                            op = ra.createRequest(new ScalarClock(id, message.getTimestamp()));
+
+                        } else
+                            op = ra.receiveRequest(message.getSenderId(), message.getTimestamp());
+                    case RPY:
+                        op = ra.receiveReply();
+
+                    case FINISH:
+                        op = ra.exitCriticalSection();
+
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            } finally {
+                switch (op) {
+                    case REPLY:
+                        this.send(message.getSenderId(), new Message(this.id, Message.Type.RPY, time.incrementAndGet()));
+                    case DEFER:
+                        deferredReplies.add(message.getSenderId());
+                    case SEND_DEFER:
+                        for (int target : deferredReplies) {
+                            this.send(target, new Message(this.id, Message.Type.RPY, time.incrementAndGet()));
+                        }
+                        deferredReplies.clear();
+                    case EXEC:
+                        executeCriticalSection();
                 }
             }
-        }).start();
-
-        while (true) {
-            if (!messageQueue.isEmpty()) {
-                System.out.println(messageQueue.poll());
-            }
         }
     }
 
-    private void broadcast(Message message) {
-        for (ObjectOutputStream outputStream : outputStreamMap.values()) {
-            try {
-                outputStream.writeObject(message);
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-    }
-
-    private void send(int id, Message message) {
-        ObjectOutputStream outputStream = outputStreamMap.get(id);
+//    private void start() {
+//        Thread requestGeneratorThread = new Thread(new RequestGenerator(messageQueue, 5, 5, id, time, senderMap));
+//        requestGeneratorThread.start();
+//        while (true) {
+//            if (!messageQueue.isEmpty()) {
+//                System.out.println(messageQueue.poll());
+//            }
+//        }
+//    }
+    private void executeCriticalSection() {
         try {
-            outputStream.writeObject(message);
-        } catch (IOException e) {
+            System.out.println("!!!!!!ENTER CRITICAL SECTION!!!!!!");
+            Thread.sleep(3000);
+            messageQueue.offer(new Message(this.id, Message.Type.FINISH, time.incrementAndGet()));
+        } catch (InterruptedException e) {
             e.printStackTrace();
         }
+
+    }
+
+//    private void broadcast(Message message) {
+//        for (Sender sender : senderMap.values()) {
+//            sender.queue.offer(message);
+//        }
+//    }
+
+    private void send(int id, Message message) {
+        senderMap.get(id).queue.offer(message);
     }
 
 
     public static void main(String[] args) {
-        Node node = new Node(Integer.parseInt(args[0]));
+        int id = Integer.parseInt(args[0]);
+        int totalNodeCount = Integer.parseInt(args[1]);
+        int ReqGenTimeFloor = Integer.parseInt(args[2]);
+        int ReqGenTimeRange = Integer.parseInt(args[3]);
+        int ReqGenTimeUnit = Integer.parseInt(args[4]);
+        Node node = new Node(id, totalNodeCount);
         node.init();
-        node.start();
+        RequestGenerator requestGenerator = new RequestGenerator(ReqGenTimeFloor, ReqGenTimeRange, ReqGenTimeUnit);
+        node.start(requestGenerator);
     }
 }

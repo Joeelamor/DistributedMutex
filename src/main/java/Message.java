@@ -2,16 +2,18 @@ import java.io.Serializable;
 
 public class Message implements Serializable {
     public enum Type {
-        REQ, RPY, REL, INI
+        REQ, RPY, INI, FINISH
     }
 
     private int senderId;
     private Type type;
+    private Integer timestamp;
 
 
-    public Message(int senderId, Type type) {
+    public Message(int senderId, Type type, Integer timestamp) {
         this.senderId = senderId;
         this.type = type;
+        this.timestamp = timestamp;
     }
 
     public int getSenderId() {
@@ -22,11 +24,16 @@ public class Message implements Serializable {
         return type;
     }
 
+    public int getTimestamp() {
+        return timestamp;
+    }
+
     @Override
     public String toString() {
         return "Message{" +
                 "senderId=" + senderId +
                 ", type=" + type +
+                ", timestamp=" + timestamp +
                 '}';
     }
 }
