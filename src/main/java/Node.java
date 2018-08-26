@@ -117,16 +117,16 @@ public class Node {
                     case REQ:
                         if (message.getSenderId() == id) {
                             op = ra.createRequest(new ScalarClock(id, message.getTimestamp()));
-
                         } else
                             op = ra.receiveRequest(message.getSenderId(), message.getTimestamp());
+                        break;
                     case RPY:
                         op = ra.receiveReply();
-
+                        break;
                     case FINISH:
                         op = ra.exitCriticalSection();
-                        requestGenerator.notify();
-
+                        requestGenerator.notifyNewRequest();
+                        break;
                 }
             } catch (Exception e) {
                 e.printStackTrace();
@@ -134,15 +134,19 @@ public class Node {
                 switch (op) {
                     case REPLY:
                         this.send(message.getSenderId(), new Message(this.id, Message.Type.RPY, time.incrementAndGet()));
+                        break;
                     case DEFER:
                         deferredReplies.add(message.getSenderId());
+                        break;
                     case SEND_DEFER:
                         for (int target : deferredReplies) {
                             this.send(target, new Message(this.id, Message.Type.RPY, time.incrementAndGet()));
                         }
                         deferredReplies.clear();
+                        break;
                     case EXEC:
                         executeCriticalSection();
+                        break;
                 }
             }
         }

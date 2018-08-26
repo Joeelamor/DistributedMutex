@@ -12,6 +12,7 @@ public class RequestGenerator implements Runnable{
     private int id;
     private ScalarClock time;
     private ConcurrentHashMap<Integer, Sender>  senderMap;
+    private boolean exitsRequest;
 
     public void setQueue(ConcurrentLinkedQueue<Message> queue) {
         this.queue = queue;
@@ -59,12 +60,23 @@ public class RequestGenerator implements Runnable{
             Message reqMessage = new Message(id ,Message.Type.REQ, time.incrementAndGet());
             queue.offer(reqMessage);
             broadcast(reqMessage);
+            waitForCurrentRequestFinish();
+        }
+    }
+
+    private synchronized void waitForCurrentRequestFinish() {
+        while (exitsRequest) {
             try {
-                this.wait();
+                wait();
             } catch (InterruptedException e) {
-                e.printStackTrace();
+                return;
             }
         }
+    }
+
+    public synchronized void notifyNewRequest() {
+        exitsRequest = false;
+        notifyAll();
     }
 
     private void broadcast(Message message) {
