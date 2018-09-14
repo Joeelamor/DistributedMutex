@@ -152,14 +152,7 @@ public class Node {
         }
     }
 
-//    private void start() {
-//        Thread requestGeneratorThread = new Thread(new RequestGenerator(messageQueue, 5, 5, id, time, senderMap));
-//        requestGeneratorThread.start();
-//        while (true) {
-//            if (!messageQueue.isEmpty()) {
-//                System.out.println(messageQueue.poll());
-//        }
-//    }
+
     private void executeCriticalSection() {
         try {
             System.out.println("!!!!!!ENTER CRITICAL SECTION!!!!!!");
@@ -172,11 +165,6 @@ public class Node {
 
     }
 
-//    private void broadcast(Message message) {
-//        for (Sender sender : senderMap.values()) {
-//            sender.queue.offer(message);
-//        }
-//    }
 
     private void send(int id, Message message) {
         senderMap.get(id).queue.offer(message);
